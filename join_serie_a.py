@@ -14,8 +14,7 @@ def era(s):
     l = {'2009-2013':list(range(2009,2014)),'2014-2017':list(range(2014,2018)),'2017-2021':list(range(2018,2022))}
     for key, years_list in l.items():
         if s in years_list:
-            return key
-        
+            return key        
 def to_row(df,year):
    d=pd.DataFrame(columns=df.columns)
    for col in df.columns:
@@ -24,7 +23,6 @@ def to_row(df,year):
       d.loc[year,col]=mean
    d=d.to_numpy()
    return d
-
 def plot_correlation_heatmap(df):
 
     # Calculate the correlation matrix
@@ -42,13 +40,11 @@ def plot_correlation_heatmap(df):
     # Show plot
     plt.savefig('Heatmap.png',dpi=300)  
     plt.close()
-
 def fail_check(dic,key):
   if (key in dic.keys()):
       return False
   else:
       return True
-
 def create_folder_if_not_exists(directory):
 
     if not os.path.exists(directory):
@@ -57,7 +53,6 @@ def create_folder_if_not_exists(directory):
         print(f"Directory '{directory}' was created.")
     else:
         print(f"Directory '{directory}' already exists.")
-
 def toyear(s):
     try:
       if '/' in s:
@@ -66,7 +61,6 @@ def toyear(s):
         return s
     except:
       pass
-
 def country_to_continent(country_name):
       if country_name in ['Bosnia-Herzegovina','England','Kosovo','Northern Ireland','Wales','Scotland']:
          return 'Europe'
@@ -79,6 +73,7 @@ def country_to_continent(country_name):
         continent_code = pc.country_alpha2_to_continent_code(country_code)
         continent_name = pc.convert_continent_code_to_continent_name(continent_code)
         return continent_name
+
 
 class Team:
     def __init__(self,name) -> None:
@@ -180,6 +175,7 @@ class FootballIndustry:
           plt.savefig(filepath, dpi=300)
           plt.close(fig) 
     def time_series_percentage_foreign(self):
+
       ts=pd.DataFrame({'Year': np.arange(self.min_y,league.max_y+1),'Perc_Foreign' :[ 0 for _ in range(len(np.arange(self.min_y,league.max_y+1).tolist())) ]})
       ts.fillna(0, inplace=True)
       default_d1=defaultdict(lambda:0)
@@ -207,6 +203,21 @@ class FootballIndustry:
       # Print the summary of the regression model
       print(model.summary())
       plt.savefig(self.directory+'percentage_foreign_ts.png',dpi=300)
+    def total_cash_flow_plot(self):
+      df=self.transfers
+      df=df[df['team_country'] != df['counter_team_country']]
+      final=df.groupby('season')['transfer_fee_amnt'].sum().reset_index()
+      plt.figure(figsize=(12,6))
+      plt.plot(final['season'],final['transfer_fee_amnt'])
+      plt.title('Aggregated Foreign Cash Flow')
+      plt.xlabel('Season')
+      plt.ylabel('Foreign Cash Flow')
+      plt.legend()
+      plt.grid(True)
+      plt.tight_layout()
+      plt.savefig(directory+'aggregated_total_cash_flow.png',dpi=300)
+      plt.close()
+      print(final['transfer_fee_amnt'].mean())
     def cash_flow_plot(self, difference=True): 
       plt.figure(figsize=(12, 6))
       ##Color & ticks:
@@ -340,7 +351,7 @@ class FootballIndustry:
         box_df.loc[:,'transfer_fee_amnt']=np.log(box_df['transfer_fee_amnt'])
         ##plotting
         sns.boxplot(box_df,x='team_country',y='transfer_fee_amnt', hue='season_range')
-        plt.title('Transfer Fee Amounts of Sell, by Team Country and Season')
+        plt.title('Transfer Fee Amounts of Sale, by Team Country and Season')
         plt.xlabel('Team Country')
         plt.ylabel('Log Transfer Fee Amount (in Euros)')
         plt.xticks(rotation=45)  # Rotate the x labels for better readability
@@ -412,14 +423,15 @@ class FootballIndustry:
       plt.savefig(self.directory+'average_selling_premium_noitaly.png', dpi=300)
       plt.close()     
     def age_plot(self):
-      pivot_means = pd.pivot_table(self.transfers, values='player_age', index=['team_country', 'season'], columns='dir', aggfunc='mean')
+      df=self.transfers[(~self.transfers['transfer_fee_amnt'].isna()) & (~self.transfers['player_age'].isna())]
+      pivot_means = pd.pivot_table(df, values='player_age', index=['team_country', 'season'], columns='dir', aggfunc='mean')
 
       # Now, calculate the difference between 'in' and 'left' ages
       pivot_means['age_difference'] = pivot_means['in'] - pivot_means['left']
 
       # Resetting the index to make 'team_country' and 'season' into columns again
       pivot_df = pivot_means['age_difference'].unstack(level=-1)  # Unstack seasons to make them columns
-      fig, ax = plt.subplots(figsize=(10, 6))
+      fig, ax = plt.subplots(figsize=(12, 6))
       i=0
       for i, country in enumerate(pivot_df.index):
           seasons = pivot_df.columns.astype(str)  # Convert season to string if necessary
@@ -431,19 +443,107 @@ class FootballIndustry:
       ax.set_xlabel('Season')
       ax.set_ylabel('Mean Age Difference (In - Left)')
       ax.legend(title='Team Country')
+      plt.grid(True)
       plt.tight_layout()
       plt.savefig(self.directory+'average_age_change.png', dpi=300)
       plt.close()
+    def age_plot_weighted(self):
+      df=self.transfers[(~self.transfers['transfer_fee_amnt'].isna()) & (~self.transfers['player_age'].isna())]
+      print(df)
+      in_df=df[df['dir']=='in'][['team_country','season','transfer_fee_amnt','player_age']]
+      out_df=df[df['dir']=='left'][['team_country','season','transfer_fee_amnt','player_age']]
 
+
+      d1=in_df.groupby(['team_country','season'])['transfer_fee_amnt'].sum().to_dict()
+      in_df['tpl_country_season']=list(zip(in_df['team_country'],in_df['season']))
+      in_df['rel_total_cashflow']=in_df['tpl_country_season'].apply(lambda x: d1[x])
+      in_df.drop('tpl_country_season', axis=1, inplace=True)
+      in_df['weighted_age']=(in_df['transfer_fee_amnt']*in_df['player_age'])
+      in_df['weighted_observation']=in_df['weighted_age']/in_df['rel_total_cashflow']
+      in_final_df=in_df.groupby(['team_country','season'])['weighted_observation'].sum().reset_index()
+      in_final_df['tpl_country_season']=list(zip(in_final_df['team_country'],in_final_df['season']))
+
+      d2=out_df.groupby(['team_country','season'])['transfer_fee_amnt'].sum().to_dict()
+      out_df['tpl_country_season']=list(zip(out_df['team_country'],out_df['season']))
+      out_df['rel_total_cashflow']=out_df['tpl_country_season'].apply(lambda x: d2[x])
+      out_df.drop('tpl_country_season', axis=1, inplace=True)
+      out_df['weighted_age']=out_df['transfer_fee_amnt']*out_df['player_age']
+      out_df['weighted_observation']=out_df['weighted_age']/out_df['rel_total_cashflow']
+      out_df_final_df=out_df.groupby(['team_country','season'])['weighted_observation'].sum().reset_index()
+      out_df_final_df['tpl_country_season']=list(zip(out_df_final_df['team_country'],out_df_final_df['season']))
+
+      final_df=in_final_df.merge(right=out_df_final_df, on='tpl_country_season')
+      final_df['age_difference']=final_df['weighted_observation_x']-final_df['weighted_observation_y']
+      final_df.drop(['weighted_observation_x', 'tpl_country_season', 'team_country_y',  'season_y',  'weighted_observation_y'], axis=1, inplace=True)
+      final_df.columns=['team_country','season','age_difference']
+
+      fig, ax = plt.subplots(figsize=(12, 6))
+      i = 0
+      for label, dfi in final_df.groupby('team_country'):
+          dfi.plot(x='season', y='age_difference', ax=ax, label=label, marker='o', color=self.colors[i])
+          i += 1
+
+      ax.set_title('Weighted Age Difference by Season for Each Team Country')
+      ax.set_xlabel('Season')
+      ax.set_ylabel('Weighted Age Difference')
+      ax.legend(title='Team Country')
+      ax.grid(True)
       
+      fig.savefig(self.directory + 'average_weighted_age_change.png', dpi=300)
+      plt.close(fig)
+
+
+
+
+
+       ### 
+
+
+       ### 
+       ## Weighted in - weighted out
+
+
+       #print(temp.groupby(['league','season'])[['transfer_fee_amnt','player_age']])
+    def free_agents(self):
+      df=self.transfers
+      ###total transactions
+      z1=df.groupby(['season'])['player_name'].count().reset_index()
+
+
+      df=df[df['counter_team_country']=='Without Club']
+      z2=df.groupby(['season'])['player_name'].count().reset_index()
+
+      final_df=z1.merge(right=z2, on='season')
+      #print(final_df)
+      #final_df=final_df[['season',  'season_x',  'player_name_x','player_name_y']]
+      final_df.columns=['season','total','free_agents']
+      final_df['proportion']=final_df['free_agents']/final_df['total']
+      final_df.drop(['total','free_agents' ], axis=1, inplace=True)
+
+
+      plt.figure(figsize=(10, 5))  # Set the figure size (optional)
+      plt.plot(final_df['season'], final_df['proportion'], marker='o')  # Plot with markers
+      plt.title('Proportion of Free Agent Transactions')  # Title of the plot
+      plt.xlabel('Year')  # X-axis label
+      plt.ylabel('Proportion')  # Y-axis label
+      plt.tight_layout()
+      plt.grid(True)  # Add gridlines (optional)
+      plt.savefig(self.directory+'free_agent_transaction.png',dpi=300)
+      #print(final_df)
+    def all(self):
+      self.geo_plots(n_eras=6)
+      self.total_cash_flow_plot()
+      self.net_flow_plot()
+      self.partnrship_transactions_heatmap()
+      self.volume_transaction()
+      self.premium_plot()
+      self.age_plot()
+      self.age_plot_weighted()
+      self.free_agents()
+            
 # Assuming the data loading and preprocessing part is correct
 directory='/Users/emanuelesebastianelli/Desktop/industrial_economics_project/'
 league=FootballIndustry()
 league.load_demographics(directory)
 league.load_transfers('/Users/emanuelesebastianelli/Desktop/industrial_economics/transfers.csv')
-#league.geo_plots(n_eras=6)
-#league.net_flow_plot()
-#league.partnrship_transactions_heatmap()
-league.volume_transaction()
-#league.premium_plot()
-#league.age_plot()
+league.all()
